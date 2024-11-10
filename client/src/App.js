@@ -6,35 +6,81 @@ function App() {
   const [weight, setWeight] = useState('');
   const [height, setHeight] = useState('');
   const [age, setAge] = useState('');
-  const [gender, setGender] = useState('male'); // Default to "male"
+  const [gender, setGender] = useState('male');
   const [targetWeight, setTargetWeight] = useState('');
+  const [dietaryRestrictions, setDietaryRestrictions] = useState([]);
   const [bmr, setBmr] = useState(null);
   const [protein, setProtein] = useState(null);
+  const [mealPlan, setMealPlan] = useState('');
+  const [customPrompt, setCustomPrompt] = useState('');
 
-  // Function to calculate BMR
-  const calculateBmr = (weight, height, age, gender) => {
-    if (gender === "male") {
-      return 10 * weight + 6.25 * height - 5 * age + 5;
-    } else {
-      return 10 * weight + 6.25 * height - 5 * age - 161;
-    }
-  };
-
-  // Function to calculate daily protein requirement
+  // Calculate daily protein requirement
   const calculateProtein = (targetWeight) => {
-    // Using 1.6 to 2.2 grams of protein per kg of target weight
     const minProtein = 1.6 * targetWeight;
     const maxProtein = 2.2 * targetWeight;
     return { min: minProtein, max: maxProtein };
   };
 
-  // Handle form submission
-  const handleSubmit = (e) => {
+  const generateCustomPrompt = () => {
+    const proteinRequirements = calculateProtein(targetWeight);
+    const dietaryRestrictionsText = dietaryRestrictions.length
+      ? dietaryRestrictions.join(', ')
+      : 'none';
+
+    const prompt = `
+      Create a 7-day meal plan with 3 meals a day based on the following:
+      - Current weight: ${weight} kg
+      - Target weight: ${targetWeight} kg
+      - Height: ${height} cm
+      - Age: ${age} years
+      - Gender: ${gender}
+      - Dietary restrictions: ${dietaryRestrictionsText}
+      - Daily protein needs: ${proteinRequirements.min.toFixed(2)} - ${proteinRequirements.max.toFixed(2)} grams
+
+      Each meal should include ingredients and basic preparation instructions. Also, generate a grocery list for the week.
+    `;
+
+    setCustomPrompt(prompt);
+  };
+
+  // Handle form submission to get a meal plan from the backend
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const calculatedBmr = calculateBmr(weight, height, age, gender);
-    const calculatedProtein = calculateProtein(targetWeight);
-    setBmr(calculatedBmr);
-    setProtein(calculatedProtein);
+    const proteinRequirements = calculateProtein(targetWeight);
+
+    try {
+      const response = await fetch('/api/generate-meal-plan', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          weight,
+          height,
+          age,
+          gender,
+          targetWeight,
+          dietaryRestrictions,
+          protein: proteinRequirements,
+        }),
+      });
+
+      const data = await response.json();
+      setMealPlan(data.mealPlan);
+    } catch (error) {
+      console.error("Error fetching meal plan:", error);
+    }
+  };
+
+  // Handle dietary restrictions change
+  const handleDietaryChange = (restriction) => {
+    setDietaryRestrictions((prev) => {
+      if (prev.includes(restriction)) {
+        return prev.filter((item) => item !== restriction);
+      } else {
+        return [...prev, restriction];
+      }
+    });
   };
 
   return (
@@ -129,6 +175,46 @@ function App() {
             </select>
           </label>
 
+          <fieldset style={{ marginTop: '20px' }}>
+            <legend>Dietary Restrictions:</legend>
+            <label>
+              <input
+                type="checkbox"
+                value="vegetarian"
+                checked={dietaryRestrictions.includes('vegetarian')}
+                onChange={() => handleDietaryChange('vegetarian')}
+              />
+              Vegetarian
+            </label>
+            <label style={{ marginLeft: '10px' }}>
+              <input
+                type="checkbox"
+                value="vegan"
+                checked={dietaryRestrictions.includes('vegan')}
+                onChange={() => handleDietaryChange('vegan')}
+              />
+              Vegan
+            </label>
+            <label style={{ marginLeft: '10px' }}>
+              <input
+                type="checkbox"
+                value="gluten-free"
+                checked={dietaryRestrictions.includes('gluten-free')}
+                onChange={() => handleDietaryChange('gluten-free')}
+              />
+              Gluten-Free
+            </label>
+            <label style={{ marginLeft: '10px' }}>
+              <input
+                type="checkbox"
+                value="dairy-free"
+                checked={dietaryRestrictions.includes('dairy-free')}
+                onChange={() => handleDietaryChange('dairy-free')}
+              />
+              Dairy-Free
+            </label>
+          </fieldset>
+
           <button
             type="submit"
             style={{
@@ -139,20 +225,52 @@ function App() {
               cursor: 'pointer',
             }}
           >
-            Calculate BMR & Protein
+            Generate Meal Plan
           </button>
         </form>
 
-        {/* Display BMR and Protein Results */}
-        {bmr && (
-          <p style={{ marginTop: '20px', fontSize: '18px' }}>
-            Your estimated BMR is: {bmr.toFixed(2)} calories/day
-          </p>
-        )}
-        {protein && (
-          <p style={{ fontSize: '18px' }}>
-            To maintain muscle mass, aim for {protein.min.toFixed(2)} - {protein.max.toFixed(2)} grams of protein per day.
-          </p>
+        {/* Button to Generate Custom Prompt */}
+        <button
+          onClick={generateCustomPrompt}
+          style={{
+            marginTop: '20px',
+            padding: '10px 20px',
+            fontSize: '16px',
+            cursor: 'pointer',
+          }}
+        >
+          Generate Prompt for ChatGPT
+        </button>
+
+        {/* Display Custom Prompt for Copying */}
+        {customPrompt && (
+          <div style={{ marginTop: '20px', width: '80%', textAlign: 'left' }}>
+            <h3>Generated Prompt for ChatGPT:</h3>
+            <textarea 
+              readOnly 
+              value={customPrompt} 
+              rows="10" 
+              style={{
+                width: '100%', 
+                padding: '10px', 
+                fontSize: '16px', 
+                resize: 'none', 
+                borderRadius: '5px', 
+                border: '1px solid #ccc',
+              }}
+            />
+            <p>
+              Copy the prompt above, then click 
+              <a 
+                href="https://chat.openai.com/" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                style={{ marginLeft: '5px', color: '#61dafb' }}
+              >
+                here to paste it into ChatGPT
+              </a>.
+            </p>
+          </div>
         )}
       </header>
     </div>
